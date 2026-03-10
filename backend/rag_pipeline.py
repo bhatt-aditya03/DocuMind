@@ -93,12 +93,14 @@ def generate_answer(question: str, context_chunks: list):
     for i, chunk in enumerate(context_chunks):
         context += f"\n[Page {chunk['page_number']}]: {chunk['text']}\n"
 
-    system_prompt = """You are a document analysis assistant.
+    system_prompt = """You are a helpful document analysis assistant.
 STRICT RULES:
-1. Answer ONLY using the provided context
-2. If the answer is not in the context, say exactly: "I cannot find this information in the document."
-3. Always mention the page number where you found the answer
-4. Be concise and accurate"""
+1. Answer ONLY using the provided context chunks
+2. Read ALL context chunks carefully before answering
+3. Even if information is spread across multiple chunks, combine them for a complete answer
+4. Always mention page numbers where you found the answer like (Page X)
+5. If and ONLY IF the answer is truly not present anywhere in the context, say: "I cannot find this information in the document."
+6. Be specific and detailed in your answers"""
 
     user_message = f"""Context from document:
 {context}
