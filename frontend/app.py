@@ -1,13 +1,19 @@
 import streamlit as st
-import requests
+import sys
+import os
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from backend.utils import load_pdf, create_chunks, get_pdf_info
+from backend.rag_pipeline import store_chunks, search_chunks, generate_answer
+from backend.summarizer import generate_summary
+import tempfile
 
 st.set_page_config(
     page_title="DocuMind — AI Document Analyzer",
     page_icon="🧠",
     layout="wide"
 )
-
-BACKEND_URL = "http://127.0.0.1:8000"
 
 if "doc_id" not in st.session_state:
     st.session_state.doc_id = None
@@ -18,9 +24,12 @@ if "summary" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-st.markdown("<h1 style='text-align: center;'>🧠 DocuMind</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: gray;'>AI-Powered Legal & Research Document Analyzer</p>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'>🧠 DocuMind</h1>",
+            unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: gray;'>AI-Powered Legal & Research Document Analyzer</p>",
+            unsafe_allow_html=True)
 st.divider()
+
 col1, col2 = st.columns([1, 2])
 
 with col1:
@@ -36,39 +45,41 @@ with col1:
         if st.session_state.filename != uploaded_file.name:
             with st.spinner("🔄 Processing PDF..."):
                 try:
-                    files = {"file": (
-                        uploaded_file.name,
-                        uploaded_file.getvalue(),
-                        "application/pdf"
-                    )}
-                    response = requests.post(
-                        f"{BACKEND_URL}/upload", files=files
-                    )
+                    with tempfile.NamedTemporaryFile(
+                        delete=False, suffix=".pdf"
+                    ) as tmp_file:
+                        tmp_file.write(uploaded_file.getvalue())
+                        tmp_path = tmp_file.name
 
-                    if response.status_code == 200:
-                        data = response.json()
-                        st.session_state.doc_id = data["doc_id"]
-                        st.session_state.filename = uploaded_file.name
-                        st.session_state.chat_history = []
+                    info = get_pdf_info(tmp_path)
+                    pages = load_pdf(tmp_path)
+                    chunks = create_chunks(pages)
 
-                        st.success("✅ PDF Successfully Processed!")
+                    import re
+                    doc_id = uploaded_file.name.replace(".pdf", "").replace(" ", "_").lower()
+                    doc_id = re.sub(r'[^a-z0-9_-]', '', doc_id)
+                    doc_id = re.sub(r'_+', '_', doc_id)
+                    doc_id = doc_id.strip('_')
+                    if len(doc_id) < 3:
+                        doc_id = "doc_" + doc_id
 
-                        col_a, col_b = st.columns(2)
-                        col_a.metric("📄 Pages", data["total_pages"])
-                        col_b.metric("🧩 Chunks", data["total_chunks"])
+                    store_chunks(chunks, doc_id=doc_id)
 
-                        with st.spinner("📝 Generating summary..."):
-                            sum_resp = requests.get(
-                                f"{BACKEND_URL}/summary/{data['doc_id']}"
-                            )
-                            if sum_resp.status_code == 200:
-                                st.session_state.summary = \
-                                    sum_resp.json()["summary"]
-                    else:
-                        st.error(f"❌ {response.json()['detail']}")
+                    st.session_state.doc_id = doc_id
+                    st.session_state.filename = uploaded_file.name
+                    st.session_state.chat_history = []
+
+                    st.success("✅ PDF Successfully Processed!")
+                    col_a, col_b = st.columns(2)
+                    col_a.metric("📄 Pages", info["total_pages"])
+                    col_b.metric("🧩 Chunks", len(chunks))
+
+                    with st.spinner("📝 Generating summary..."):
+                        result = generate_summary(chunks)
+                        st.session_state.summary = result["summary"]
 
                 except Exception as e:
-                    st.error(f"❌ Backend error: {str(e)}")
+                    st.error(f"❌ Error: {str(e)}")
 
     if st.session_state.summary:
         st.divider()
@@ -88,11 +99,10 @@ with col2:
                 st.write(chat["question"])
 
             with st.chat_message("assistant"):
-                # Confidence
                 if chat["confidence"] == "high":
                     st.success("🟢 High Confidence")
                 else:
-                    st.error("🔴 Low Confidence — Answer may not be in document")
+                    st.error("🔴 Low Confidence")
 
                 st.write(chat["answer"])
 
@@ -104,32 +114,28 @@ with col2:
 
                 st.divider()
 
-        question = st.chat_input(
-            "Ask anything about the document..."
-        )
+        question = st.chat_input("Ask anything about the document...")
 
         if question:
             with st.spinner("🤔 Analyzing document..."):
                 try:
-                    response = requests.post(
-                        f"{BACKEND_URL}/ask",
-                        json={
-                            "question": question,
-                            "doc_id": st.session_state.doc_id
-                        }
+                    context_chunks = search_chunks(
+                        question=question,
+                        doc_id=st.session_state.doc_id,
+                        top_k=3
+                    )
+                    result = generate_answer(
+                        question=question,
+                        context_chunks=context_chunks
                     )
 
-                    if response.status_code == 200:
-                        data = response.json()
-                        st.session_state.chat_history.append({
-                            "question": question,
-                            "answer": data["answer"],
-                            "confidence": data["confidence"],
-                            "sources": data["sources"]
-                        })
-                        st.rerun()
-                    else:
-                        st.error(f"❌ {response.json()['detail']}")
+                    st.session_state.chat_history.append({
+                        "question": question,
+                        "answer": result["answer"],
+                        "confidence": result["confidence"],
+                        "sources": result["sources"]
+                    })
+                    st.rerun()
 
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")

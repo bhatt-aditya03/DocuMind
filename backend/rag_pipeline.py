@@ -81,8 +81,12 @@ def search_chunks(question: str, doc_id: str, top_k: int = 3):
 
 
 def generate_answer(question: str, context_chunks: list):
-    groq_api_key = os.getenv("GROQ_API_KEY")
-
+    try:
+        import streamlit as st
+        groq_api_key = st.secrets["GROQ_API_KEY"]
+    except:
+        groq_api_key = os.getenv("GROQ_API_KEY")
+    
     llm = ChatGroq(
         api_key=groq_api_key,
         model_name="llama-3.3-70b-versatile",

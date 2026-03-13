@@ -6,7 +6,11 @@ from langchain.schema import HumanMessage, SystemMessage
 load_dotenv()
 
 def generate_summary(chunks: list):
-    groq_api_key = os.getenv("GROQ_API_KEY")
+    try:
+        import streamlit as st
+        groq_api_key = st.secrets["GROQ_API_KEY"]
+    except:
+        groq_api_key = os.getenv("GROQ_API_KEY")
 
     llm = ChatGroq(
         api_key=groq_api_key,
