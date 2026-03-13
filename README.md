@@ -1,13 +1,19 @@
 # 🧠 DocuMind — AI-Powered Document Analyzer
 
-![Python](https://img.shields.io/badge/Python-3.13-blue?style=flat-square&logo=python)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.112-green?style=flat-square&logo=fastapi)
+![Python](https://img.shields.io/badge/Python-3.11-blue?style=flat-square&logo=python)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.38-red?style=flat-square&logo=streamlit)
 ![LangChain](https://img.shields.io/badge/LangChain-0.2.16-yellow?style=flat-square)
 ![ChromaDB](https://img.shields.io/badge/ChromaDB-0.5.5-purple?style=flat-square)
 ![Groq](https://img.shields.io/badge/Groq-LLaMA3--70b-orange?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
 > Upload any legal contract or research paper — ask questions in plain English — get accurate answers with **exact page citations**. No hallucination guaranteed.
+
+## 🚀 Live Demo
+
+**[👉 Try DocuMind Live — docu-mind03.streamlit.app](https://docu-mind03.streamlit.app/)**
+
+> ⚡ No installation needed — upload any PDF and start asking questions instantly!
 
 ---
 
@@ -20,6 +26,7 @@ DocuMind lets you:
 - Ask questions in plain English
 - Get precise answers with **page number citations**
 - Know **exactly** which part of the document was used
+- Never get hallucinated answers — strict document-only responses
 
 ---
 
@@ -65,8 +72,8 @@ Streamlit UI displays answer + confidence + sources
 | **Backend** | FastAPI + Uvicorn |
 | **RAG Pipeline** | LangChain |
 | **Embeddings** | HuggingFace `all-MiniLM-L6-v2` |
-| **Vector DB** | ChromaDB |
-| **LLM** | Groq API — LLaMA3-70b |
+| **Vector DB** | ChromaDB (Persistent) |
+| **LLM** | Groq API — LLaMA3-70b-versatile |
 | **PDF Processing** | PyPDF |
 
 ---
@@ -83,14 +90,14 @@ DocuMind/
 │   └── app.py           # Streamlit UI
 ├── uploads/             # Uploaded PDFs stored here
 ├── chroma_db/           # Vector embeddings stored here
-├── .env                 # API keys (not committed)
+├── .env.example         # Environment variables template
 ├── .gitignore
 └── requirements.txt
 ```
 
 ---
 
-## 🚀 How to Run Locally
+## ⚙️ How to Run Locally
 
 ### 1. Clone the repository
 ```bash
@@ -102,7 +109,7 @@ cd DocuMind
 ```bash
 python3 -m venv venv
 source venv/bin/activate  # Mac/Linux
-# venv\Scripts\activate   # Windows
+venv\Scripts\activate     # Windows
 ```
 
 ### 3. Install dependencies
@@ -116,17 +123,12 @@ cp .env.example .env
 # Add your Groq API key in .env
 ```
 
-### 5. Run the backend
-```bash
-uvicorn backend.main:app --reload --port 8000
-```
-
-### 6. Run the frontend (new terminal)
+### 5. Run the app
 ```bash
 streamlit run frontend/app.py
 ```
 
-### 7. Open in browser
+### 6. Open in browser
 ```
 http://localhost:8501
 ```
@@ -144,7 +146,7 @@ Get your free Groq API key at [console.groq.com](https://console.groq.com)
 
 ---
 
-## 📡 API Endpoints
+## 📡 API Endpoints (Local Development)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -152,18 +154,6 @@ Get your free Groq API key at [console.groq.com](https://console.groq.com)
 | `POST` | `/upload` | Upload and process PDF |
 | `POST` | `/ask` | Ask question about document |
 | `GET` | `/summary/{doc_id}` | Get document summary |
-
-### Example Request
-```bash
-# Upload PDF
-curl -X POST "http://localhost:8000/upload" \
-  -F "file=@document.pdf"
-
-# Ask question
-curl -X POST "http://localhost:8000/ask" \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What are the key clauses?", "doc_id": "document"}'
-```
 
 ---
 
@@ -173,6 +163,19 @@ curl -X POST "http://localhost:8000/ask" \
 - 📚 **Research Papers** — Extract key findings and methodology
 - 📋 **Policy Documents** — Understand complex policies quickly
 - 🎓 **Academic Syllabi** — Navigate course content easily
+- 📑 **Business Reports** — Quick insights from long reports
+
+---
+
+## 🗓️ Built In 5 Days
+
+| Day | What was built |
+|-----|---------------|
+| Day 1 | Project setup, dependencies, environment |
+| Day 2 | RAG pipeline — PDF chunking, ChromaDB, Groq LLM |
+| Day 3 | FastAPI backend — upload, ask, summary endpoints |
+| Day 4 | Streamlit UI — chat interface, confidence indicator |
+| Day 5 | README, deployment, live on Streamlit Cloud |
 
 ---
 
@@ -184,4 +187,4 @@ curl -X POST "http://localhost:8000/ask" \
 
 ## 📄 License
 
-MIT License — feel free to use and modify!
+MIT License — free to use, modify and distribute!
