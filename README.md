@@ -13,8 +13,9 @@
 
 **[👉 Try DocuMind Live — docu-mind03.streamlit.app](https://docu-mind03.streamlit.app/)**
 
-> ⚡ No installation needed — upload any PDF and start asking questions instantly!
+![DocuMind App Screenshot](screenshot.png)
 
+> ⚡ No installation needed — upload any PDF and start asking questions instantly!
 ---
 
 ## 🎯 What Problem Does This Solve?
