@@ -156,6 +156,18 @@ Get your free Groq API key at [console.groq.com](https://console.groq.com)
 | `POST` | `/ask` | Ask question about document |
 | `GET` | `/summary/{doc_id}` | Get document summary |
 
+### Example Request
+```bash
+# Upload PDF
+curl -X POST "http://localhost:8000/upload" \
+  -F "file=@document.pdf"
+
+# Ask question
+curl -X POST "http://localhost:8000/ask" \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What are the key clauses?", "doc_id": "document"}'
+```
+
 ---
 
 ## 💡 Use Cases
@@ -177,6 +189,8 @@ Get your free Groq API key at [console.groq.com](https://console.groq.com)
 | Day 3 | FastAPI backend — upload, ask, summary endpoints |
 | Day 4 | Streamlit UI — chat interface, confidence indicator |
 | Day 5 | README, deployment, live on Streamlit Cloud |
+
+> **Post-launch refactor:** `@lru_cache` for embedding model, specific exception handling, shared `sanitize_doc_id()` utility, temp file cleanup, and English docstrings throughout.
 
 ---
 
