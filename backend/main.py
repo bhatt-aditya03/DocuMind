@@ -3,6 +3,7 @@
 
 import os
 import shutil
+import tempfile
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -58,13 +59,15 @@ async def upload_pdf(file: UploadFile = File(...)):
             detail="Only PDF files are supported."
         )
 
+    tmp_path = None
     try:
-        file_path = f"uploads/{file.filename}"
-        with open(file_path, "wb") as f:
-            shutil.copyfileobj(file.file, f)
+        # Write uploaded file to temp location
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+            shutil.copyfileobj(file.file, tmp_file)
+            tmp_path = tmp_file.name
 
-        info = get_pdf_info(file_path)
-        pages = load_pdf(file_path)
+        info = get_pdf_info(tmp_path)
+        pages = load_pdf(tmp_path)
 
         if not pages:
             raise HTTPException(
@@ -92,7 +95,10 @@ async def upload_pdf(file: UploadFile = File(...)):
             status_code=500,
             detail=f"Failed to process PDF: {str(e)}"
         )
-
+    finally:
+        # Always clean up temp file
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 # ─── Ask Endpoint ──────────────────────────────────────────────
 @app.post("/ask")
