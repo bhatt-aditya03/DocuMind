@@ -1,17 +1,20 @@
+# backend/main.py
+# FastAPI server — exposes RAG pipeline as REST API endpoints
+
 import os
-import re
 import shutil
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-from backend.utils import load_pdf, create_chunks, get_pdf_info
+from backend.utils import load_pdf, create_chunks, get_pdf_info, sanitize_doc_id
 from backend.rag_pipeline import store_chunks, search_chunks, generate_answer
 from backend.summarizer import generate_summary
 
 load_dotenv()
 
+# ─── FastAPI App ───────────────────────────────────────────────
 app = FastAPI(
     title="DocuMind API",
     description="RAG-based Legal & Research Document Analyzer",
@@ -25,28 +28,35 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-current_doc = {"doc_id": None, "filename": None, "total_chunks": 0}
 
+# ─── Request Models ────────────────────────────────────────────
 class QuestionRequest(BaseModel):
     question: str
     doc_id: str
 
+
+# ─── Root Endpoint ─────────────────────────────────────────────
 @app.get("/")
 def root():
     return {
-        "message": "Welcome to DocuMind API! 🧠",
+        "message": "Welcome to DocuMind API!",
         "status": "running",
         "endpoints": ["/upload", "/ask", "/summary/{doc_id}"]
     }
 
+
+# ─── Upload Endpoint ───────────────────────────────────────────
 @app.post("/upload")
 async def upload_pdf(file: UploadFile = File(...)):
     """
-    PDF file lo → chunks banao → ChromaDB mein store karo
-    Returns: doc_id, total_pages, total_chunks
+    Accept a PDF file, process it into chunks, and store in ChromaDB.
+    Returns doc_id, total_pages, and total_chunks.
     """
     if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Sirf PDF files allowed hain!")
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF files are supported."
+        )
 
     try:
         file_path = f"uploads/{file.filename}"
@@ -54,48 +64,54 @@ async def upload_pdf(file: UploadFile = File(...)):
             shutil.copyfileobj(file.file, f)
 
         info = get_pdf_info(file_path)
-
         pages = load_pdf(file_path)
 
+        if not pages:
+            raise HTTPException(
+                status_code=400,
+                detail="No extractable text found in the PDF. The file may be scanned or image-based."
+            )
+
         chunks = create_chunks(pages)
-
-        doc_id = file.filename.replace(".pdf", "").replace(" ", "_").lower()
-        doc_id = re.sub(r'[^a-z0-9_-]', '', doc_id)
-        doc_id = re.sub(r'_+', '_', doc_id)
-        doc_id = doc_id.strip('_')
-        if len(doc_id) < 3:
-            doc_id = "doc_" + doc_id
-
+        doc_id = sanitize_doc_id(file.filename)
         store_chunks(chunks, doc_id=doc_id)
-
-        current_doc["doc_id"] = doc_id
-        current_doc["filename"] = file.filename
-        current_doc["total_chunks"] = len(chunks)
 
         return {
             "success": True,
-            "message": f"PDF successfully processed!",
+            "message": "PDF successfully processed.",
             "doc_id": doc_id,
             "filename": file.filename,
             "total_pages": info["total_pages"],
             "total_chunks": len(chunks)
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to process PDF: {str(e)}"
+        )
 
 
+# ─── Ask Endpoint ──────────────────────────────────────────────
 @app.post("/ask")
 async def ask_question(request: QuestionRequest):
     """
-    Question lo → similar chunks dhundho → Groq se answer generate karo
-    Returns: answer, confidence, sources with page numbers
+    Accept a question and doc_id, retrieve relevant chunks,
+    and return an LLM-generated answer with page citations.
     """
     if not request.question.strip():
-        raise HTTPException(status_code=400, detail="Question empty nahi ho sakta!")
+        raise HTTPException(
+            status_code=400,
+            detail="Question cannot be empty."
+        )
 
     if not request.doc_id:
-        raise HTTPException(status_code=400, detail="Pehle PDF upload karo!")
+        raise HTTPException(
+            status_code=400,
+            detail="doc_id is required. Please upload a PDF first."
+        )
 
     try:
         context_chunks = search_chunks(
@@ -123,15 +139,20 @@ async def ask_question(request: QuestionRequest):
             ]
         }
 
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate answer: {str(e)}"
+        )
 
 
+# ─── Summary Endpoint ──────────────────────────────────────────
 @app.get("/summary/{doc_id}")
 async def get_summary(doc_id: str):
     """
-    Document ka automatic summary do
-    Returns: structured summary
+    Retrieve and summarize a previously uploaded document by doc_id.
     """
     try:
         from backend.rag_pipeline import get_chroma_client
@@ -139,10 +160,10 @@ async def get_summary(doc_id: str):
 
         try:
             collection = client.get_collection(name=doc_id)
-        except:
+        except Exception as e:
             raise HTTPException(
                 status_code=404,
-                detail="Document nahi mila! Pehle PDF upload karo."
+                detail="Document not found. Please upload the PDF first."
             )
 
         data = collection.get()
@@ -168,4 +189,7 @@ async def get_summary(doc_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate summary: {str(e)}"
+        )

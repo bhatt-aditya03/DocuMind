@@ -1,3 +1,6 @@
+# backend/summarizer.py
+# Generates a structured summary of a document using Groq LLaMA3
+
 import os
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
@@ -5,21 +8,33 @@ from langchain.schema import HumanMessage, SystemMessage
 
 load_dotenv()
 
-def generate_summary(chunks: list):
+
+def get_api_key() -> str:
+    """
+    Retrieve Groq API key from Streamlit secrets or environment variable.
+    """
     try:
         import streamlit as st
-        groq_api_key = st.secrets["GROQ_API_KEY"]
-    except:
-        groq_api_key = os.getenv("GROQ_API_KEY")
+        return st.secrets["GROQ_API_KEY"]
+    except (ImportError, KeyError):
+        return os.getenv("GROQ_API_KEY")
 
+
+def generate_summary(chunks: list):
+    """
+    Generate a structured document summary using the first 10 chunks.
+    Analyzes document type, main topic, key points, and important sections.
+    Returns: dict with summary text, chunks_analyzed, and total_chunks
+    """
     llm = ChatGroq(
-        api_key=groq_api_key,
+        api_key=get_api_key(),
         model_name="llama-3.3-70b-versatile",
         temperature=0
     )
 
+    # Use first 10 chunks for summary — covers document overview
     top_chunks = chunks[:10]
-    
+
     context = ""
     for chunk in top_chunks:
         context += f"\n[Page {chunk['page_number']}]: {chunk['chunk_text']}\n"

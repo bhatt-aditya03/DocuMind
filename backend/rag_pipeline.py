@@ -1,34 +1,60 @@
+# backend/rag_pipeline.py
+# Core RAG pipeline — embeddings, vector storage, similarity search, and LLM answer generation
+
 import os
+from functools import lru_cache
 from dotenv import load_dotenv
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from langchain.schema import HumanMessage, SystemMessage
 import chromadb
-from chromadb.config import Settings
 
 load_dotenv()
 
 
+def get_api_key() -> str:
+    """
+    Retrieve Groq API key from Streamlit secrets or environment variable.
+    """
+    try:
+        import streamlit as st
+        return st.secrets["GROQ_API_KEY"]
+    except (ImportError, KeyError):
+        return os.getenv("GROQ_API_KEY")
+
+
+@lru_cache(maxsize=1)
 def get_embeddings():
-    embeddings = HuggingFaceEmbeddings(
+    """
+    Load HuggingFace embedding model once and cache it.
+    Avoids reloading the model on every function call.
+    """
+    return HuggingFaceEmbeddings(
         model_name="sentence-transformers/all-MiniLM-L6-v2",
         model_kwargs={"device": "cpu"}
     )
-    return embeddings
 
 
+@lru_cache(maxsize=1)
 def get_chroma_client():
-    client = chromadb.PersistentClient(path="./chroma_db")
-    return client
+    """
+    Initialize ChromaDB persistent client once and cache it.
+    """
+    return chromadb.PersistentClient(path="./chroma_db")
 
 
 def store_chunks(chunks: list, doc_id: str):
+    """
+    Embed chunks using HuggingFace and store them in ChromaDB.
+    Deletes existing collection for the same doc_id before storing.
+    """
     embeddings_model = get_embeddings()
     client = get_chroma_client()
 
+    # Delete existing collection if it exists
     try:
         client.delete_collection(name=doc_id)
-    except:
+    except Exception:
         pass
 
     collection = client.create_collection(name=doc_id)
@@ -57,10 +83,17 @@ def store_chunks(chunks: list, doc_id: str):
 
 
 def search_chunks(question: str, doc_id: str, top_k: int = 3):
+    """
+    Find the most relevant chunks for a given question using similarity search.
+    Returns: list of dicts with text, page_number, and preview
+    """
     embeddings_model = get_embeddings()
     client = get_chroma_client()
 
-    collection = client.get_collection(name=doc_id)
+    try:
+        collection = client.get_collection(name=doc_id)
+    except Exception as e:
+        raise ValueError(f"Document '{doc_id}' not found in ChromaDB. Please upload the PDF first.") from e
 
     question_vector = embeddings_model.embed_query(question)
 
@@ -81,20 +114,18 @@ def search_chunks(question: str, doc_id: str, top_k: int = 3):
 
 
 def generate_answer(question: str, context_chunks: list):
-    try:
-        import streamlit as st
-        groq_api_key = st.secrets["GROQ_API_KEY"]
-    except:
-        groq_api_key = os.getenv("GROQ_API_KEY")
-    
+    """
+    Generate an answer using Groq LLaMA3 based strictly on retrieved context chunks.
+    Returns: dict with answer, confidence level, and source chunks
+    """
     llm = ChatGroq(
-        api_key=groq_api_key,
+        api_key=get_api_key(),
         model_name="llama-3.3-70b-versatile",
         temperature=0
     )
 
     context = ""
-    for i, chunk in enumerate(context_chunks):
+    for chunk in context_chunks:
         context += f"\n[Page {chunk['page_number']}]: {chunk['text']}\n"
 
     system_prompt = """You are a helpful document analysis assistant.
@@ -119,12 +150,9 @@ Answer based only on the context above:"""
     ]
 
     response = llm.invoke(messages)
-
     answer_text = response.content
-    if "cannot find" in answer_text.lower():
-        confidence = "low"
-    else:
-        confidence = "high"
+
+    confidence = "low" if "cannot find" in answer_text.lower() else "high"
 
     return {
         "answer": answer_text,
