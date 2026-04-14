@@ -1,10 +1,22 @@
 # backend/utils.py
 # Handles PDF loading, text extraction, and chunk creation
-
+import os
 import re
 from pypdf import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from dotenv import load_dotenv
 
+load_dotenv()
+
+def get_api_key() -> str:
+    """
+    Retrieve Groq API key from Streamlit secrets or environment variable.
+    """
+    try:
+        import streamlit as st
+        return st.secrets["GROQ_API_KEY"]
+    except (ImportError, KeyError):
+        return os.getenv("GROQ_API_KEY")
 
 def load_pdf(file_path: str):
     """

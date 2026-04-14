@@ -2,23 +2,9 @@
 # Generates a structured summary of a document using Groq LLaMA3
 
 import os
-from dotenv import load_dotenv
+from backend.utils import get_api_key
 from langchain_groq import ChatGroq
 from langchain.schema import HumanMessage, SystemMessage
-
-load_dotenv()
-
-
-def get_api_key() -> str:
-    """
-    Retrieve Groq API key from Streamlit secrets or environment variable.
-    """
-    try:
-        import streamlit as st
-        return st.secrets["GROQ_API_KEY"]
-    except (ImportError, KeyError):
-        return os.getenv("GROQ_API_KEY")
-
 
 def generate_summary(chunks: list):
     """

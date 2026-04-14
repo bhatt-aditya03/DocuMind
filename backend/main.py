@@ -58,6 +58,16 @@ async def upload_pdf(file: UploadFile = File(...)):
             status_code=400,
             detail="Only PDF files are supported."
         )
+    
+     # File size validation — max 10MB
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB in bytes
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail="File too large. Maximum allowed size is 10MB."
+        )
+    await file.seek(0)  # Reset file pointer after reading
 
     tmp_path = None
     try:
