@@ -1,23 +1,17 @@
 # frontend/app.py
-# Streamlit UI — DocuMind document analyzer interface
+# Streamlit UI — calls FastAPI backend on Render
 
 import streamlit as st
-import sys
-import os
-import tempfile
-
-# Add project root to path for backend imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from backend.utils import load_pdf, create_chunks, get_pdf_info, sanitize_doc_id
-from backend.rag_pipeline import store_chunks, search_chunks, generate_answer
-from backend.summarizer import generate_summary
+import requests
 
 st.set_page_config(
     page_title="DocuMind — AI Document Analyzer",
     page_icon="🧠",
     layout="wide"
 )
+
+# ─── Backend URL ───────────────────────────────────────────────
+BACKEND_URL = "https://documind-api-y0hc.onrender.com"
 
 # ─── Session State ─────────────────────────────────────────────
 if "doc_id" not in st.session_state:
@@ -57,55 +51,46 @@ with col1:
     if uploaded_file is not None:
         if st.session_state.filename != uploaded_file.name:
             with st.spinner("🔄 Processing PDF..."):
-                tmp_path = None
                 try:
-                    # Write to temp file safely — always cleaned up
-                    with tempfile.NamedTemporaryFile(
-                        delete=False,
-                        suffix=".pdf"
-                    ) as tmp_file:
-                        tmp_file.write(uploaded_file.getvalue())
-                        tmp_path = tmp_file.name
+                    files = {"file": (
+                        uploaded_file.name,
+                        uploaded_file.getvalue(),
+                        "application/pdf"
+                    )}
+                    response = requests.post(
+                        f"{BACKEND_URL}/upload",
+                        files=files,
+                        timeout=120
+                    )
 
-                    # Validate PDF has extractable text
-                    info = get_pdf_info(tmp_path)
-                    pages = load_pdf(tmp_path)
-
-                    if not pages:
-                        st.error(
-                            "No extractable text found in this PDF. "
-                            "The file may be scanned or image-based."
-                        )
-                    else:
-                        chunks = create_chunks(pages)
-                        doc_id = sanitize_doc_id(uploaded_file.name)
-
-                        store_chunks(chunks, doc_id=doc_id)
-
-                        st.session_state.doc_id = doc_id
+                    if response.status_code == 200:
+                        data = response.json()
+                        st.session_state.doc_id = data["doc_id"]
                         st.session_state.filename = uploaded_file.name
                         st.session_state.chat_history = []
 
                         st.success("✅ PDF Successfully Processed!")
-
                         col_a, col_b = st.columns(2)
-                        col_a.metric("📄 Pages", info["total_pages"])
-                        col_b.metric("🧩 Chunks", len(chunks))
+                        col_a.metric("📄 Pages", data["total_pages"])
+                        col_b.metric("🧩 Chunks", data["total_chunks"])
 
                         # Auto summary
                         with st.spinner("📝 Generating summary..."):
-                            result = generate_summary(chunks)
-                            st.session_state.summary = result["summary"]
+                            sum_resp = requests.get(
+                                f"{BACKEND_URL}/summary/{data['doc_id']}",
+                                timeout=120
+                            )
+                            if sum_resp.status_code == 200:
+                                st.session_state.summary = \
+                                    sum_resp.json()["summary"]
+                    else:
+                        st.error(f"❌ {response.json().get('detail', 'Upload failed')}")
 
+                except requests.exceptions.Timeout:
+                    st.error("⏱️ Request timed out. Render free tier may be sleeping — try again!")
                 except Exception as e:
-                    st.error(f"Failed to process PDF: {str(e)}")
+                    st.error(f"❌ Error: {str(e)}")
 
-                finally:
-                    # Always clean up temp file
-                    if tmp_path and os.path.exists(tmp_path):
-                        os.unlink(tmp_path)
-
-    # Summary display
     if st.session_state.summary:
         st.divider()
         st.subheader("📋 Document Summary")
@@ -149,28 +134,31 @@ with col2:
         if question:
             with st.spinner("🤔 Analyzing document..."):
                 try:
-                    context_chunks = search_chunks(
-                        question=question,
-                        doc_id=st.session_state.doc_id,
-                        top_k=3
-                    )
-                    result = generate_answer(
-                        question=question,
-                        context_chunks=context_chunks
+                    response = requests.post(
+                        f"{BACKEND_URL}/ask",
+                        json={
+                            "question": question,
+                            "doc_id": st.session_state.doc_id
+                        },
+                        timeout=120
                     )
 
-                    st.session_state.chat_history.append({
-                        "question": question,
-                        "answer": result["answer"],
-                        "confidence": result["confidence"],
-                        "sources": result["sources"]
-                    })
-                    st.rerun()
+                    if response.status_code == 200:
+                        data = response.json()
+                        st.session_state.chat_history.append({
+                            "question": question,
+                            "answer": data["answer"],
+                            "confidence": data["confidence"],
+                            "sources": data["sources"]
+                        })
+                        st.rerun()
+                    else:
+                        st.error(f"❌ {response.json().get('detail', 'Error')}")
 
-                except ValueError as e:
-                    st.error(f"Document error: {str(e)}")
+                except requests.exceptions.Timeout:
+                    st.error("⏱️ Request timed out. Please try again!")
                 except Exception as e:
-                    st.error(f"Failed to generate answer: {str(e)}")
+                    st.error(f"❌ Error: {str(e)}")
 
         if st.session_state.chat_history:
             if st.button("🗑️ Clear Chat History"):
