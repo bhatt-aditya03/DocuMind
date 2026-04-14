@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: documind-api
+    name: DocuMind-API
     runtime: python
     pythonVersion: "3.11.4"
     buildCommand: pip install -r requirements.txt
