@@ -16,6 +16,12 @@
 ![DocuMind App Screenshot](screenshot.png)
 
 > ⚡ No installation needed — upload any PDF and start asking questions instantly!
+### 🔌 API (Backend)
+FastAPI backend is also deployed separately on Render:
+- **Base URL:** `https://documind-api-y0hc.onrender.com`
+- **Swagger Docs:** `https://documind-api-y0hc.onrender.com/docs`
+
+> Note: Render free tier may have cold start delay of 30-60 seconds.
 ---
 
 ## 🎯 What Problem Does This Solve?
